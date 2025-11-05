@@ -4,24 +4,122 @@ local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local SettingsService = settings()
 
 local Player = Players.LocalPlayer
 if not Player then return end
 
+--== REMOVER GUI ANTIGA ==--
+local oldGui = Player:FindFirstChild("PlayerGui") and Player.PlayerGui:FindFirstChild("FPSGui")
+if oldGui then
+	pcall(function() oldGui:Destroy() end)
+end
+
+--== CONFIGURAÇÕES DE REDE E RENDER ==--
+pcall(function()
+	-- renderização no máximo
+	if SettingsService and SettingsService.Rendering then
+		SettingsService.Rendering.QualityLevel = Enum.QualityLevel.Level21
+		SettingsService.Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
+		SettingsService.Network.IncomingReplicationLag = -0.001 
+	end
+
+	-- reduzir carga visual
+	Lighting.GlobalShadows = false
+	Lighting.EnvironmentSpecularScale = 0
+	Lighting.EnvironmentDiffuseScale = 0
+	Lighting.Brightness = 0.7
+	Lighting.ClockTime = 14
+	Lighting.FogStart = 0
+	Lighting.FogEnd = 1e9
+	Lighting.OutdoorAmbient = Color3.fromRGB(128,128,128)
+	Lighting.ExposureCompensation = 0
+	pcall(function() Lighting.Technology = Enum.Technology.Compatibility end)
+
+	for _, v in ipairs(Lighting:GetChildren()) do
+		if v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("DepthOfFieldEffect")
+		or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") then
+			v.Enabled = false
+		end
+	end
+
+	local Terrain = Workspace:FindFirstChildOfClass("Terrain")
+	if Terrain then
+		Terrain.Decoration = false
+		Terrain.WaterWaveSize = 0
+		Terrain.WaterWaveSpeed = 0
+		Terrain.WaterReflectance = 0
+		Terrain.WaterTransparency = 0.8
+	end
+
+	for _, obj in ipairs(Workspace:GetDescendants()) do
+		if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Fire")
+		or obj:IsA("Smoke") or obj:IsA("Explosion") then
+			pcall(function() obj.Enabled = false end)
+		elseif obj:IsA("MeshPart") or obj:IsA("UnionOperation") or obj:IsA("Part") then
+			pcall(function()
+				obj.CastShadow = false
+				if obj.Material == Enum.Material.Grass then
+					obj.Material = Enum.Material.SmoothPlastic
+				end
+			end)
+		elseif obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
+			pcall(function() obj.Enabled = false end)
+		end
+	end
+
+	pcall(function()
+		Workspace.StreamingEnabled = true
+		Workspace.StreamingMinRadius = 64
+		Workspace.StreamingTargetRadius = 128
+	end)
+
+	for _, s in ipairs(Workspace:GetDescendants()) do
+		if s:IsA("Sound") then
+			pcall(function() s.Volume = 0 end)
+		end
+	end
+
+	collectgarbage("collect")
+end)
+
+--== SISTEMA DE AGRUPAMENTO / BATCH ==--
 local BATCH_INTERVAL = 0.1
 local MAX_BATCH_SIZE = 50
 local UPDATE_EVENT_NAME = "UpdateEvent"
-local GLOBAL_CONN_NAME = "_G.HAKAI_ANTILAG_CONN"
 
-if _G and _G.HAKAI_ANTILAG_CONN and type(_G.HAKAI_ANTILAG_CONN.Disconnect) == "function" then
-    pcall(function() _G.HAKAI_ANTILAG_CONN:Disconnect() end)
-    _G.HAKAI_ANTILAG_CONN = nil
+local batchBuffer = {}
+local lastBatchSend = tick()
+local updateEvent = ReplicatedStorage:FindFirstChild(UPDATE_EVENT_NAME)
+local sending = false
+
+local function sendBatch()
+	if sending or #batchBuffer == 0 then return end
+	sending = true
+	local toSend = {}
+	for i = 1, math.min(#batchBuffer, MAX_BATCH_SIZE) do
+		toSend[#toSend+1] = batchBuffer[i]
+	end
+	for i = 1, #toSend do table.remove(batchBuffer, 1) end
+	if updateEvent and updateEvent:IsA("RemoteEvent") then
+		pcall(function() updateEvent:FireServer(toSend) end)
+	end
+	sending = false
+	lastBatchSend = tick()
 end
 
-local existingGui = Player:FindFirstChild("PlayerGui") and Player.PlayerGui:FindFirstChild("FPSGui")
-if existingGui then
-    pcall(function() existingGui:Destroy() end)
+local function queueUpdate(data)
+	if not data then return end
+	table.insert(batchBuffer, data)
+	if #batchBuffer >= MAX_BATCH_SIZE then sendBatch() end
 end
+_G.HAKAI_QUEUE_UPDATE = queueUpdate
+
+local batchHeartbeatConn = RunService.Heartbeat:Connect(function()
+	if tick() - lastBatchSend >= BATCH_INTERVAL then
+		sendBatch()
+	end
+end)
 
 --== GUI FPS ==--
 local ScreenGui = Instance.new("ScreenGui")
@@ -31,140 +129,49 @@ ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = Player:WaitForChild("PlayerGui")
 
 local FPSLabel = Instance.new("TextLabel")
-FPSLabel.Size = UDim2.new(0, 120, 0, 22)
+FPSLabel.Size = UDim2.new(0, 100, 0, 25)
 FPSLabel.Position = UDim2.new(1, -150, 0, 10)
 FPSLabel.AnchorPoint = Vector2.new(1, 0)
 FPSLabel.BackgroundTransparency = 1
-FPSLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+FPSLabel.TextColor3 = Color3.fromRGB(0,255,0)
 FPSLabel.Font = Enum.Font.Code
 FPSLabel.TextScaled = true
 FPSLabel.Text = "FPS: --"
 FPSLabel.Parent = ScreenGui
 
---== CONFIG RENDER ==--
-pcall(function()
-    if settings and settings().Rendering then
-        settings().Rendering.QualityLevel = Enum.QualityLevel.Level21
-        settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
-    end
-
-    Lighting.GlobalShadows = false
-    Lighting.EnvironmentSpecularScale = 0
-    Lighting.EnvironmentDiffuseScale = 0.01
-    Lighting.Brightness = 0.8
-    Lighting.ClockTime = 13.8
-    Lighting.FogStart = 0
-    Lighting.FogEnd = 1000000
-    Lighting.OutdoorAmbient = Color3.fromRGB(130, 130, 130)
-    Lighting.ExposureCompensation = 0
-    pcall(function() Lighting.Technology = Enum.Technology.Compatibility end)
-
-    for _, eff in ipairs(Lighting:GetChildren()) do
-        if eff:IsA("BloomEffect") or eff:IsA("BlurEffect") or eff:IsA("DepthOfFieldEffect")
-        or eff:IsA("SunRaysEffect") or eff:IsA("ColorCorrectionEffect") then
-            eff.Enabled = false
-        end
-    end
-
-    local Terrain = Workspace:FindFirstChildOfClass("Terrain")
-    if Terrain then
-        Terrain.Decoration = false
-        Terrain.WaterWaveSize = 0
-        Terrain.WaterWaveSpeed = 0
-        Terrain.WaterReflectance = 0
-        Terrain.WaterTransparency = 0.8
-    end
-
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Fire")
-        or obj:IsA("Smoke") or obj:IsA("Explosion") then
-            pcall(function() obj.Enabled = false end)
-        elseif obj:IsA("MeshPart") or obj:IsA("UnionOperation") or obj:IsA("Part") then
-            pcall(function()
-                obj.CastShadow = false
-                if obj.Material == Enum.Material.Grass then
-                    obj.Material = Enum.Material.SmoothPlastic
-                end
-            end)
-        elseif obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
-            pcall(function() obj.Enabled = false end)
-        end
-    end
-
-    pcall(function()
-        Workspace.StreamingEnabled = true
-        Workspace.StreamingMinRadius = 64
-        Workspace.StreamingTargetRadius = 128
-    end)
-
-    for _, s in ipairs(Workspace:GetDescendants()) do
-        if s:IsA("Sound") then
-            pcall(function() s.Volume = 0 end)
-        end
-    end
-
-    collectgarbage("collect")
-end)
-
---== SISTEMA DE AGRUPAMENTO / BATCH ==--
-local batchBuffer = {}
-local lastBatchSend = tick()
-local updateEvent = ReplicatedStorage:FindFirstChild(UPDATE_EVENT_NAME)
-local sending = false
-
-local function sendBatch()
-    if sending or #batchBuffer == 0 then return end
-    sending = true
-    local toSend = {}
-    for i = 1, math.min(#batchBuffer, MAX_BATCH_SIZE) do
-        table.insert(toSend, batchBuffer[i])
-    end
-    for i = 1, #toSend do table.remove(batchBuffer, 1) end
-    if updateEvent and updateEvent:IsA("RemoteEvent") then
-        pcall(function() updateEvent:FireServer(toSend) end)
-    end
-    sending = false
-    lastBatchSend = tick()
-end
-
-local function queueUpdate(data)
-    if not data then return end
-    table.insert(batchBuffer, data)
-    if #batchBuffer >= MAX_BATCH_SIZE then sendBatch() end
-end
-_G.HAKAI_QUEUE_UPDATE = queueUpdate
-
-local batchHeartbeatConn = RunService.Heartbeat:Connect(function()
-    if tick() - lastBatchSend >= BATCH_INTERVAL then
-        sendBatch()
-    end
-end)
-
---== FPS DISPLAY ==--
+--== MONITOR FPS ==--
 local frames, lastTime = 0, tick()
 local guiUpdateConn = RunService.RenderStepped:Connect(function()
-    frames += 1
-    local now = tick()
-    if now - lastTime >= 1 then
-        local fps = math.floor(frames / (now - lastTime))
-        frames = 0
-        lastTime = now
-        pcall(function()
-            FPSLabel.Text = "FPS: " .. tostring(fps)
-            if fps < 40 then
-                FPSLabel.TextColor3 = Color3.fromRGB(255, 80, 0)
-            elseif fps > 240 then
-                FPSLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-            else
-                FPSLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
-            end
-        end)
-    end
+	frames += 1
+	local now = tick()
+	if now - lastTime >= 1 then
+		local fps = math.floor(frames / (now - lastTime))
+		frames, lastTime = 0, now
+		FPSLabel.Text = "FPS: " .. tostring(fps)
+		if fps < 40 then
+			FPSLabel.TextColor3 = Color3.fromRGB(255, 80, 0)
+		elseif fps > 240 then
+			FPSLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+		else
+			FPSLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+		end
+	end
+end)
+
+--== SISTEMA DE AUTO OTIMIZAÇÃO DE REDE ==--
+local netSmoothConn = RunService.Heartbeat:Connect(function(dt)
+	pcall(function()
+		local net = SettingsService.Network
+		if net.IncomingReplicationLag > 0 then
+			net.IncomingReplicationLag = -0.001
+		end
+	end)
 end)
 
 _G.HAKAI_ANTILAG_CONN = {
-    Disconnect = function()
-        pcall(function() guiUpdateConn:Disconnect() end)
-        pcall(function() batchHeartbeatConn:Disconnect() end)
-    end
+	Disconnect = function()
+		pcall(function() guiUpdateConn:Disconnect() end)
+		pcall(function() batchHeartbeatConn:Disconnect() end)
+		pcall(function() netSmoothConn:Disconnect() end)
+	end
 }
