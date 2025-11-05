@@ -32,7 +32,7 @@ ScreenGui.Parent = Player:WaitForChild("PlayerGui")
 
 local FPSLabel = Instance.new("TextLabel")
 FPSLabel.Size = UDim2.new(0, 120, 0, 22)
-FPSLabel.Position = UDim2.new(1, -5, 0, 2)
+FPSLabel.Position = UDim2.new(1, -150, 0, 10)
 FPSLabel.AnchorPoint = Vector2.new(1, 0)
 FPSLabel.BackgroundTransparency = 1
 FPSLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
