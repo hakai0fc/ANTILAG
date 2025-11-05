@@ -9,22 +9,18 @@ local SettingsService = settings()
 local Player = Players.LocalPlayer
 if not Player then return end
 
---== REMOVER GUI ANTIGA ==--
 local oldGui = Player:FindFirstChild("PlayerGui") and Player.PlayerGui:FindFirstChild("FPSGui")
 if oldGui then
 	pcall(function() oldGui:Destroy() end)
 end
 
---== CONFIGURAÇÕES DE REDE E RENDER ==--
 pcall(function()
-	-- renderização no máximo
 	if SettingsService and SettingsService.Rendering then
 		SettingsService.Rendering.QualityLevel = Enum.QualityLevel.Level21
 		SettingsService.Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
 		SettingsService.Network.IncomingReplicationLag = -0.001 
 	end
 
-	-- reduzir carga visual
 	Lighting.GlobalShadows = false
 	Lighting.EnvironmentSpecularScale = 0
 	Lighting.EnvironmentDiffuseScale = 0
@@ -83,7 +79,6 @@ pcall(function()
 	collectgarbage("collect")
 end)
 
---== SISTEMA DE AGRUPAMENTO / BATCH ==--
 local BATCH_INTERVAL = 0.1
 local MAX_BATCH_SIZE = 50
 local UPDATE_EVENT_NAME = "UpdateEvent"
@@ -121,7 +116,6 @@ local batchHeartbeatConn = RunService.Heartbeat:Connect(function()
 	end
 end)
 
---== GUI FPS ==--
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "FPSGui"
 ScreenGui.ResetOnSpawn = false
@@ -133,36 +127,63 @@ FPSLabel.Name = "FPSLabel"
 FPSLabel.Size = UDim2.new(0, 100, 0, 25)
 FPSLabel.Position = UDim2.new(1, -10, 0, 10)
 FPSLabel.AnchorPoint = Vector2.new(1, 0)
-FPSLabel.BackgroundTransparency = 1
+FPSLabel.BackgroundTransparency = 0.3
 FPSLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 FPSLabel.BorderSizePixel = 0
 FPSLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
 FPSLabel.Font = Enum.Font.Code
 FPSLabel.TextScaled = true
-FPSLabel.Text = "FPS: --"
+FPSLabel.Text = "FPS:--"
 FPSLabel.ZIndex = 10
 FPSLabel.Parent = ScreenGui
 
---== MONITOR FPS ==--
+local PingLabel = Instance.new("TextLabel")
+PingLabel.Name = "PingLabel"
+PingLabel.Size = UDim2.new(0, 100, 0, 22)
+PingLabel.Position = UDim2.new(1, -10, 0, 35)
+PingLabel.AnchorPoint = Vector2.new(1, 0)
+PingLabel.BackgroundTransparency = 0.3
+PingLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+PingLabel.BorderSizePixel = 0
+PingLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+PingLabel.Font = Enum.Font.Code
+PingLabel.TextScaled = true
+PingLabel.Text = "PING:--"
+PingLabel.ZIndex = 10
+PingLabel.Parent = ScreenGui
+
+
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
 local frames, lastTime = 0, tick()
-local guiUpdateConn = RunService.RenderStepped:Connect(function()
+
+RunService.RenderStepped:Connect(function()
 	frames += 1
 	local now = tick()
 	if now - lastTime >= 1 then
 		local fps = math.floor(frames / (now - lastTime))
-		frames, lastTime = 0, now
-		FPSLabel.Text = "FPS: " .. tostring(fps)
+		frames = 0
+		lastTime = now
+
+		local pingStat = Stats.Network.ServerStatsItem["Data Ping"]
+		local ping = pingStat and math.floor(pingStat:GetValue()) or 0
+
+		FPSLabel.Text = "FPS:" .. tostring(fps)
+		PingLabel.Text = "PING:" .. tostring(ping) .. "ms"
+
 		if fps < 40 then
 			FPSLabel.TextColor3 = Color3.fromRGB(255, 80, 0)
+			FPSLabel.BackgroundColor3 = Color3.fromRGB(40, 0, 0)
 		elseif fps > 240 then
 			FPSLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+			FPSLabel.BackgroundColor3 = Color3.fromRGB(0, 30, 0)
 		else
 			FPSLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+			FPSLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 0)
 		end
 	end
 end)
 
---== SISTEMA DE AUTO OTIMIZAÇÃO DE REDE ==--
 local netSmoothConn = RunService.Heartbeat:Connect(function(dt)
 	pcall(function()
 		local net = SettingsService.Network
