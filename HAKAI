@@ -23,6 +23,7 @@ if existingGui then
     pcall(function() existingGui:Destroy() end)
 end
 
+--== GUI FPS ==--
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "FPSGui"
 ScreenGui.ResetOnSpawn = false
@@ -30,16 +31,17 @@ ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = Player:WaitForChild("PlayerGui")
 
 local FPSLabel = Instance.new("TextLabel")
-FPSLabel.Size = UDim2.new(0, 140, 0, 24)
-FPSLabel.Position = UDim2.new(1, -150, 0, 10)
+FPSLabel.Size = UDim2.new(0, 120, 0, 22)
+FPSLabel.Position = UDim2.new(1, -5, 0, 2)
 FPSLabel.AnchorPoint = Vector2.new(1, 0)
-FPSLabel.BackgroundTransparency = 1 -- totalmente transparente
+FPSLabel.BackgroundTransparency = 1
 FPSLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
 FPSLabel.Font = Enum.Font.Code
 FPSLabel.TextScaled = true
 FPSLabel.Text = "FPS: --"
 FPSLabel.Parent = ScreenGui
 
+--== CONFIG RENDER ==--
 pcall(function()
     if settings and settings().Rendering then
         settings().Rendering.QualityLevel = Enum.QualityLevel.Level21
@@ -104,6 +106,7 @@ pcall(function()
     collectgarbage("collect")
 end)
 
+--== SISTEMA DE AGRUPAMENTO / BATCH ==--
 local batchBuffer = {}
 local lastBatchSend = tick()
 local updateEvent = ReplicatedStorage:FindFirstChild(UPDATE_EVENT_NAME)
@@ -137,6 +140,7 @@ local batchHeartbeatConn = RunService.Heartbeat:Connect(function()
     end
 end)
 
+--== FPS DISPLAY ==--
 local frames, lastTime = 0, tick()
 local guiUpdateConn = RunService.RenderStepped:Connect(function()
     frames += 1
