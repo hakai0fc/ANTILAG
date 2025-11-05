@@ -129,14 +129,18 @@ ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = Player:WaitForChild("PlayerGui")
 
 local FPSLabel = Instance.new("TextLabel")
+FPSLabel.Name = "FPSLabel"
 FPSLabel.Size = UDim2.new(0, 100, 0, 25)
-FPSLabel.Position = UDim2.new(1, -150, 0, 10)
+FPSLabel.Position = UDim2.new(1, -10, 0, 10)
 FPSLabel.AnchorPoint = Vector2.new(1, 0)
 FPSLabel.BackgroundTransparency = 1
-FPSLabel.TextColor3 = Color3.fromRGB(0,255,0)
+FPSLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+FPSLabel.BorderSizePixel = 0
+FPSLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
 FPSLabel.Font = Enum.Font.Code
 FPSLabel.TextScaled = true
 FPSLabel.Text = "FPS: --"
+FPSLabel.ZIndex = 10
 FPSLabel.Parent = ScreenGui
 
 --== MONITOR FPS ==--
