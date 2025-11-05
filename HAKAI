@@ -1,10 +1,27 @@
---ANTI LAG HAKAI
+--HAKAI ANTI LAG
+local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
-local Players = game:GetService("Players")
-local Terrain = Workspace:FindFirstChildOfClass("Terrain")
-local Player = Players.LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
+local Player = Players.LocalPlayer
+if not Player then return end
+local BATCH_INTERVAL = 0.1
+local MAX_BATCH_SIZE = 50  
+local PING_SAMPLE_INTERVAL = 5 
+local UPDATE_EVENT_NAME = "UpdateEvent"
+local PING_EVENT_NAME = "PingEvent"
+local GLOBAL_CONN_NAME = "_G.HAKAI_ANTILAG_CONN"
+
+if _G and _G.HAKAI_ANTILAG_CONN and type(_G.HAKAI_ANTILAG_CONN.Disconnect) == "function" then
+    pcall(function() _G.HAKAI_ANTILAG_CONN:Disconnect() end)
+    _G.HAKAI_ANTILAG_CONN = nil
+end
+local existingGui = Player:FindFirstChild("PlayerGui") and Player.PlayerGui:FindFirstChild("FPSGui")
+if existingGui then
+    pcall(function() existingGui:Destroy() end)
+end
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "FPSGui"
 ScreenGui.ResetOnSpawn = false
@@ -12,81 +29,218 @@ ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = Player:WaitForChild("PlayerGui")
 
 local FPSLabel = Instance.new("TextLabel")
-FPSLabel.Size = UDim2.new(0, 100, 0, 25)
-FPSLabel.Position = UDim2.new(1, -110, 0, 10)
-FPSLabel.BackgroundTransparency = 1
-FPSLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+FPSLabel.Size = UDim2.new(0, 140, 0, 24)
+FPSLabel.Position = UDim2.new(1, -150, 0, 10)
+FPSLabel.AnchorPoint = Vector2.new(1,0)
+FPSLabel.BackgroundTransparency = 0.6
+FPSLabel.BackgroundColor3 = Color3.fromRGB(10,10,10)
 FPSLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
 FPSLabel.Font = Enum.Font.Code
 FPSLabel.TextScaled = true
 FPSLabel.Text = "FPS: --"
 FPSLabel.Parent = ScreenGui
 
+local PingLabel = Instance.new("TextLabel")
+PingLabel.Size = UDim2.new(0, 140, 0, 20)
+PingLabel.Position = UDim2.new(1, -150, 0, 36)
+PingLabel.AnchorPoint = Vector2.new(1,0)
+PingLabel.BackgroundTransparency = 0.6
+PingLabel.BackgroundColor3 = Color3.fromRGB(10,10,10)
+PingLabel.TextColor3 = Color3.fromRGB(255,255,255)
+PingLabel.Font = Enum.Font.Code
+PingLabel.TextScaled = true
+PingLabel.Text = "PING: N/A"
+PingLabel.Parent = ScreenGui
+
+local BatchLabel = Instance.new("TextLabel")
+BatchLabel.Size = UDim2.new(0, 140, 0, 20)
+BatchLabel.Position = UDim2.new(1, -150, 0, 60)
+BatchLabel.AnchorPoint = Vector2.new(1,0)
+BatchLabel.BackgroundTransparency = 0.6
+BatchLabel.BackgroundColor3 = Color3.fromRGB(10,10,10)
+BatchLabel.TextColor3 = Color3.fromRGB(200,200,0)
+BatchLabel.Font = Enum.Font.Code
+BatchLabel.TextScaled = true
+BatchLabel.Text = "BATCH: 0"
+BatchLabel.Parent = ScreenGui
 pcall(function()
-	settings().Rendering.QualityLevel = Enum.QualityLevel.Level21
-	settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
+    if settings and settings().Rendering then
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level21
+        settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
+    end
 
-	Lighting.GlobalShadows = false
-	Lighting.EnvironmentSpecularScale = 0
-	Lighting.EnvironmentDiffuseScale = 0.01
-	Lighting.Brightness = 0.8
-	Lighting.ClockTime = 13.8
-	Lighting.FogStart = 0
-	Lighting.FogEnd = 1000000
-	Lighting.OutdoorAmbient = Color3.fromRGB(130, 130, 130)
-	Lighting.ExposureCompensation = 0
+    -- Lighting tweaks
+    Lighting.GlobalShadows = false
+    Lighting.EnvironmentSpecularScale = 0
+    Lighting.EnvironmentDiffuseScale = 0.01
+    Lighting.Brightness = 0.8
+    Lighting.ClockTime = 13.8
+    Lighting.FogStart = 0
+    Lighting.FogEnd = 1000000
+    Lighting.OutdoorAmbient = Color3.fromRGB(130, 130, 130)
+    Lighting.ExposureCompensation = 0
+    pcall(function() Lighting.Technology = Enum.Technology.Compatibility end)
+    for _, eff in ipairs(Lighting:GetChildren()) do
+        if eff:IsA("BloomEffect") or eff:IsA("BlurEffect") or eff:IsA("DepthOfFieldEffect")
+        or eff:IsA("SunRaysEffect") or eff:IsA("ColorCorrectionEffect") then
+            eff.Enabled = false
+        end
+    end
 
-	for _, eff in ipairs(Lighting:GetChildren()) do
-		if eff:IsA("BloomEffect") or eff:IsA("BlurEffect") or eff:IsA("DepthOfFieldEffect") 
-		or eff:IsA("SunRaysEffect") or eff:IsA("ColorCorrectionEffect") then
-			eff.Enabled = false
-		end
-	end
+    local Terrain = Workspace:FindFirstChildOfClass("Terrain")
+    if Terrain then
+        Terrain.Decoration = false
+        Terrain.WaterWaveSize = 0
+        Terrain.WaterWaveSpeed = 0
+        Terrain.WaterReflectance = 0
+        Terrain.WaterTransparency = 0.8
+    end
 
-	if Terrain then
-		Terrain.Decoration = false
-		Terrain.WaterWaveSize = 0
-		Terrain.WaterWaveSpeed = 0
-		Terrain.WaterReflectance = 0
-		Terrain.WaterTransparency = 0.8
-	end
+    -- Workspace-wide optimizations (desativa partículas/luzes)
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Fire")
+        or obj:IsA("Smoke") or obj:IsA("Explosion") then
+            pcall(function() obj.Enabled = false end)
+        elseif obj:IsA("MeshPart") or obj:IsA("UnionOperation") or obj:IsA("Part") then
+            pcall(function()
+                obj.CastShadow = false
+                if obj.Material == Enum.Material.Grass then
+                    obj.Material = Enum.Material.SmoothPlastic
+                end
+            end)
+        elseif obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
+            pcall(function() obj.Enabled = false end)
+        end
+    end
+    pcall(function()
+        Workspace.StreamingEnabled = true
+        if Workspace:GetAttribute("StreamingMinRadius") == nil then
+            pcall(function()
+                Workspace.StreamingMinRadius = 64
+                Workspace.StreamingTargetRadius = 128
+            end)
+        end
+    end)
+    for _, s in ipairs(Workspace:GetDescendants()) do
+        if s:IsA("Sound") then
+            pcall(function() s.Volume = 0 end)
+        end
+    end
 
-	for _, obj in ipairs(Workspace:GetDescendants()) do
-		if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Fire") 
-		or obj:IsA("Smoke") or obj:IsA("Explosion") then
-			obj.Enabled = false
-		elseif obj:IsA("MeshPart") or obj:IsA("UnionOperation") or obj:IsA("Part") then
-			obj.CastShadow = false
-			if obj.Material == Enum.Material.Grass then
-				obj.Material = Enum.Material.SmoothPlastic
-			end
-		elseif obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
-			obj.Enabled = false
-		end
-	end
+    collectgarbage("collect")
 end)
 
-local RunService = game:GetService("RunService")
-local frames, lastTime = -1, tick()
+local batchBuffer = {}
+local lastBatchSend = tick()
+local updateEvent = ReplicatedStorage:FindFirstChild(UPDATE_EVENT_NAME)
+local sending = false
 
-RunService.RenderStepped:Connect(function()
-	frames += 1
-	local now = tick()
-	if now - lastTime >= 1 then
-		local fps = math.floor(frames / (now - lastTime))
-		frames = 0
-		lastTime = now
-		FPSLabel.Text = "FPS: " .. fps
+local function sendBatch()
+    if sending then return end
+    if #batchBuffer == 0 then return end
+    sending = true
 
-		if fps < 40 then
-			FPSLabel.TextColor3 = Color3.fromRGB(255, 80, 0)
-			FPSLabel.BackgroundColor3 = Color3.fromRGB(40, 0, 0)
-		elseif fps > 240 then
-			FPSLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-			FPSLabel.BackgroundColor3 = Color3.fromRGB(0, 30, 0)
-		else
-			FPSLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
-			FPSLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 0)
-		end
-	end
+    local toSend = {}
+    for i = 1, math.min(#batchBuffer, MAX_BATCH_SIZE) do
+        table.insert(toSend, batchBuffer[i])
+    end
+    if #toSend > 0 then
+        for i = 1, #toSend do table.remove(batchBuffer, 1) end
+        if updateEvent and updateEvent:IsA("RemoteEvent") then
+            pcall(function()
+                updateEvent:FireServer(toSend)
+            end)
+        else
+        end
+    end
+
+    sending = false
+    lastBatchSend = tick()
+end
+
+local function queueUpdate(data)
+    if not data then return end
+    table.insert(batchBuffer, data)
+    if #batchBuffer >= MAX_BATCH_SIZE then
+        sendBatch()
+    end
+end
+_G.HAKAI_QUEUE_UPDATE = queueUpdate
+local batchHeartbeatConn
+batchHeartbeatConn = RunService.Heartbeat:Connect(function(dt)
+    if tick() - lastBatchSend >= BATCH_INTERVAL then
+        sendBatch()
+    end
+    BatchLabel.Text = ("BATCH: %d"):format(#batchBuffer)
 end)
+local pingEvent = ReplicatedStorage:FindFirstChild(PING_EVENT_NAME)
+local lastPingTime = 0
+local pingValue = nil
+
+local function measurePingOnce(callback)
+    if not pingEvent or not pingEvent:IsA("RemoteEvent") then
+        if callback then callback(nil) end
+        return
+    end
+    local sendTime = os.clock()
+    local conn
+    conn = pingEvent.OnClientEvent:Connect(function(clientTime, serverTime)
+        if clientTime == sendTime then
+            local rtt = (os.clock() - sendTime)
+            pcall(function() conn:Disconnect() end)
+            if callback then callback(rtt) end
+        end
+    end)
+    pcall(function() pingEvent:FireServer(sendTime) end)
+end
+spawn(function()
+    while true do
+        measurePingOnce(function(rtt)
+            if rtt then
+                pingValue = math.floor(rtt * 1000) -- ms
+            else
+                pingValue = nil
+            end
+        end)
+        wait(PING_SAMPLE_INTERVAL)
+    end
+end)
+local frames, lastTime = 0, tick()
+local guiUpdateConn
+guiUpdateConn = RunService.RenderStepped:Connect(function()
+    frames = frames + 1
+    local now = tick()
+    if now - lastTime >= 1 then
+        local fps = math.floor(frames / (now - lastTime))
+        frames = 0
+        lastTime = now
+        pcall(function()
+            FPSLabel.Text = "FPS: " .. tostring(fps)
+            if fps < 40 then
+                FPSLabel.TextColor3 = Color3.fromRGB(255, 80, 0)
+                FPSLabel.BackgroundColor3 = Color3.fromRGB(40, 0, 0)
+                FPSLabel.BackgroundTransparency = 0.6
+            elseif fps > 240 then
+                FPSLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+                FPSLabel.BackgroundColor3 = Color3.fromRGB(0, 30, 0)
+                FPSLabel.BackgroundTransparency = 0.6
+            else
+                FPSLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+                FPSLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 0)
+                FPSLabel.BackgroundTransparency = 0.6
+            end
+            if pingValue then
+                PingLabel.Text = ("PING: %d ms"):format(pingValue)
+            else
+                PingLabel.Text = "PING: N/A"
+            end
+        end)
+    end
+end)
+
+_G.HAKAI_ANTILAG_CONN = {
+    Disconnect = function()
+        pcall(function() if guiUpdateConn then guiUpdateConn:Disconnect() end end)
+        pcall(function() if batchHeartbeatConn then batchHeartbeatConn:Disconnect() end end)
+    end
+}
