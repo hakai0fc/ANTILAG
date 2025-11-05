@@ -1,0 +1,92 @@
+--ANTI LAG HAKAI
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local Terrain = Workspace:FindFirstChildOfClass("Terrain")
+local Player = Players.LocalPlayer
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "FPSGui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = Player:WaitForChild("PlayerGui")
+
+local FPSLabel = Instance.new("TextLabel")
+FPSLabel.Size = UDim2.new(0, 100, 0, 25)
+FPSLabel.Position = UDim2.new(1, -110, 0, 10)
+FPSLabel.BackgroundTransparency = 1
+FPSLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+FPSLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+FPSLabel.Font = Enum.Font.Code
+FPSLabel.TextScaled = true
+FPSLabel.Text = "FPS: --"
+FPSLabel.Parent = ScreenGui
+
+pcall(function()
+	settings().Rendering.QualityLevel = Enum.QualityLevel.Level21
+	settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
+
+	Lighting.GlobalShadows = false
+	Lighting.EnvironmentSpecularScale = 0
+	Lighting.EnvironmentDiffuseScale = 0.01
+	Lighting.Brightness = 0.8
+	Lighting.ClockTime = 13.8
+	Lighting.FogStart = 0
+	Lighting.FogEnd = 1000000
+	Lighting.OutdoorAmbient = Color3.fromRGB(130, 130, 130)
+	Lighting.ExposureCompensation = 0
+
+	for _, eff in ipairs(Lighting:GetChildren()) do
+		if eff:IsA("BloomEffect") or eff:IsA("BlurEffect") or eff:IsA("DepthOfFieldEffect") 
+		or eff:IsA("SunRaysEffect") or eff:IsA("ColorCorrectionEffect") then
+			eff.Enabled = false
+		end
+	end
+
+	if Terrain then
+		Terrain.Decoration = false
+		Terrain.WaterWaveSize = 0
+		Terrain.WaterWaveSpeed = 0
+		Terrain.WaterReflectance = 0
+		Terrain.WaterTransparency = 0.8
+	end
+
+	for _, obj in ipairs(Workspace:GetDescendants()) do
+		if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Fire") 
+		or obj:IsA("Smoke") or obj:IsA("Explosion") then
+			obj.Enabled = false
+		elseif obj:IsA("MeshPart") or obj:IsA("UnionOperation") or obj:IsA("Part") then
+			obj.CastShadow = false
+			if obj.Material == Enum.Material.Grass then
+				obj.Material = Enum.Material.SmoothPlastic
+			end
+		elseif obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
+			obj.Enabled = false
+		end
+	end
+end)
+
+local RunService = game:GetService("RunService")
+local frames, lastTime = -1, tick()
+
+RunService.RenderStepped:Connect(function()
+	frames += 1
+	local now = tick()
+	if now - lastTime >= 1 then
+		local fps = math.floor(frames / (now - lastTime))
+		frames = 0
+		lastTime = now
+		FPSLabel.Text = "FPS: " .. fps
+
+		if fps < 40 then
+			FPSLabel.TextColor3 = Color3.fromRGB(255, 80, 0)
+			FPSLabel.BackgroundColor3 = Color3.fromRGB(40, 0, 0)
+		elseif fps > 240 then
+			FPSLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+			FPSLabel.BackgroundColor3 = Color3.fromRGB(0, 30, 0)
+		else
+			FPSLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+			FPSLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 0)
+		end
+	end
+end)
