@@ -200,3 +200,14 @@ _G.HAKAI_ANTILAG_CONN = {
 		pcall(function() netSmoothConn:Disconnect() end)
 	end
 }
+
+local function SetCameraDistance(dist)
+	dist = tonumber(dist)
+	if not dist then return end
+
+	local player = game:GetService("Players").LocalPlayer
+	player.CameraMinZoomDistance = 0
+	player.CameraMaxZoomDistance = dist
+end
+
+SetCameraDistance(999999999)
