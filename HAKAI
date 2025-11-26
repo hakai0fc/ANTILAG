@@ -210,4 +210,4 @@ local function SetCameraDistance(dist)
 	player.CameraMaxZoomDistance = dist
 end
 
-SetCameraDistance(999999999)
+SetCameraDistance(1500000)
